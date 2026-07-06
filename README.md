@@ -58,30 +58,60 @@ WhatsApp (send as document) or pendrive.
 > debug keystore (`%USERPROFILE%\.android\debug.keystore`) - updates only
 > install over the old version if signed with the same key. Back that file up.
 
-## 3. Install checklist for each tester phone
+## 3. Admin (dashboard) login
+
+The dashboard is behind an email/password admin login. Set these two
+environment variables on the Render service (Environment tab), then it
+redeploys and creates the admin account:
+
+- `ADMIN_EMAIL` - your email (use a real domain; `.local`/`.test` are rejected)
+- `ADMIN_PASSWORD` - password you choose
+
+The `API_KEY` still works as a master key for scripts/verification.
+
+## 4. Install checklist for each tester phone
 
 1. Install the APK (allow "install from unknown sources" when asked)
-2. Open the app, fill in: name, server URL, API key -> tap the "Fix" buttons
-   until every permission shows a green tick:
+2. Open the app -> **Create account** with name, email, and a password the
+   person chooses and remembers (the server URL is already filled in).
+3. Tap the "Fix" buttons until every permission shows a green tick:
    - Location -> **"Allow all the time"** (not "only while using")
    - Notifications -> allow
    - Battery -> no restrictions
-3. **Xiaomi / Redmi / Oppo / Vivo / Realme:** also enable
-   **Autostart** for Field Tracker in phone settings (Security app ->
-   Autostart), or the phone will kill tracking after a while.
-4. Switch tracking ON - a permanent notification appears (this is required by
-   Android and cannot be hidden).
-5. Check the dashboard - the person should appear within a minute.
+   - Uninstall protection -> enable (Device Admin; blocks one-tap uninstall)
+4. **Xiaomi / Redmi / Oppo / Vivo / Realme:** also enable **Autostart** for
+   Field Tracker in phone settings (Security app -> Autostart), or the phone
+   will kill tracking after a while.
+5. Switch tracking ON - a permanent, silent notification appears (required by
+   Android, cannot be hidden - it is what keeps tracking legal and honest).
+6. Check the dashboard - the person appears within a minute.
 
-Staff can stop tracking any time with the toggle (e.g. after duty hours).
+- **Turning tracking OFF requires the account password.**
+- Removing the app requires first disabling Device Admin (several steps in
+  Settings); doing so sends a "removed app protection" alert to the dashboard.
 
-## 4. Daily use
+## 5. Daily use
 
-- Dashboard shows each person: green dot = reported < 5 min ago,
-  orange < 15 min, red = older (phone off / killed / no signal).
-- Click a person -> blue line shows their route for the last 12 hours.
-- If a phone shows red while the person is on duty, it is almost always the
-  battery-optimization / autostart settings from step 3.
+- Each person has a fixed colour. Tick people in the sidebar to draw their
+  route (last 12 h) on the map.
+- Status badge: **live** (< 5 min), **delayed** (< 15 min), **offline**
+  (older - phone off / killed / no signal), **tracking off** (turned off by
+  the person). The marker stays at the last known position when offline.
+- "Recent activity" panel lists tamper events: who turned tracking off/on and
+  who removed app protection, with timestamps.
+- If a phone shows offline while the person is on duty, it is almost always the
+  battery-optimization / autostart settings from step 4.
+
+## Tamper protection - what it does and does not do
+
+- **Does:** password to turn off in-app; app can't be uninstalled with one tap
+  (Device Admin); dashboard is alerted when someone turns tracking off or
+  removes protection.
+- **Does not:** it is a *deterrent*, not a hard lock. A determined person can
+  still deactivate Device Admin via phone Settings, or factory-reset the phone.
+  A true hard lock needs "Device Owner" enrolment (factory reset + QR setup per
+  phone) - only worth it later with company-owned devices. The system GPS
+  switch also cannot be locked without Device Owner.
 
 ## Later, when you scale
 
