@@ -1,0 +1,26 @@
+# Secrets - never commit
+backend/.env
+
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+backend/tracker.db
+backend/server.out.log
+backend/server.err.log
+
+# Flutter / Android
+app/build/
+app/.dart_tool/
+app/android/.gradle/
+app/android/local.properties
+.idea/
+app/.idea/
+*.iml
+
+# Build outputs
+*.apk
+
+# Setup script leftovers
+app/pubspec.yaml.bak
+app/lib_bak/

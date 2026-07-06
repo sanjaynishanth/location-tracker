@@ -1,0 +1,22 @@
+name: field_tracker
+description: Field staff location tracker (internal testing build)
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  geolocator: ^13.0.2
+  flutter_foreground_task: ^8.17.0
+  http: ^1.2.2
+  shared_preferences: ^2.3.3
+  battery_plus: ^6.2.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
