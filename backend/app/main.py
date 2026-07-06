@@ -291,6 +291,16 @@ def user_history(
     }
 
 
+@app.post("/api/v1/admin/clear-tracks", dependencies=[Depends(require_admin)])
+def clear_tracks(db: OrmSession = Depends(get_db)):
+    """Wipe all recorded location points and events (keeps staff accounts).
+    Handy for clearing test data before a real trial."""
+    pings = db.query(models.Ping).delete()
+    events = db.query(models.Event).delete()
+    db.commit()
+    return {"cleared_points": pings, "cleared_events": events}
+
+
 @app.get("/api/v1/events", dependencies=[Depends(require_admin)])
 def list_events(
     hours: int = Query(default=24, ge=1, le=336),

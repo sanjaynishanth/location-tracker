@@ -114,7 +114,8 @@
     <div id="alerts"><div id="alerts-empty">No events yet.</div></div>
 
     <div id="footer">
-      Auto-refreshes every 10 s &middot; <span id="who"></span> &middot; <a onclick="logout()">sign out</a>
+      Auto-refreshes every 10 s &middot; <span id="who"></span><br>
+      <a onclick="clearTracks()">clear test data</a> &middot; <a onclick="logout()">sign out</a>
     </div>
   </div>
   <div id="map"></div>
@@ -354,6 +355,24 @@ function logout() {
   localStorage.removeItem(TOKEN_KEY);
   token = '';
   showLogin();
+}
+
+async function clearTracks() {
+  if (!confirm('Delete ALL recorded location tracks and events?\nStaff accounts are kept. This cannot be undone.')) return;
+  try {
+    const res = await fetch('/api/v1/admin/clear-tracks', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    for (const id of Object.keys(trails)) { map.removeLayer(trails[id]); delete trails[id]; }
+    for (const id of Object.keys(markers)) { map.removeLayer(markers[id]); delete markers[id]; }
+    selected.clear();
+    didFit = false;
+    refresh();
+    alert('Test data cleared.');
+  } catch (e) {
+    alert('Could not clear: ' + e.message);
+  }
 }
 
 document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
