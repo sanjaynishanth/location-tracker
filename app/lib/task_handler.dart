@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:battery_plus/battery_plus.dart';
@@ -37,6 +38,10 @@ class LocationTaskHandler extends TaskHandler {
   String _name = '';
   String _deviceId = '';
 
+  // Continuous GPS stream keeps a live fix instead of cold one-shot reads.
+  StreamSubscription<Position>? _posSub;
+  Position? _latest;
+
   List<Map<String, dynamic>> _queue = [];
   static const int _maxQueue = 1000;
 
@@ -60,6 +65,24 @@ class LocationTaskHandler extends TaskHandler {
         _queue = [];
       }
     }
+
+    _startLocationStream();
+  }
+
+  void _startLocationStream() {
+    _posSub?.cancel();
+    try {
+      _posSub = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+        ),
+      ).listen(
+        (p) => _latest = p,
+        onError: (_) {},
+        cancelOnError: false,
+      );
+    } catch (_) {}
   }
 
   @override
@@ -93,18 +116,26 @@ class LocationTaskHandler extends TaskHandler {
   }
 
   Future<Map<String, dynamic>?> _capturePing() async {
-    Position? pos;
-    try {
-      pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 25),
-        ),
-      );
-    } catch (_) {
-      pos = await Geolocator.getLastKnownPosition();
+    // Prefer the freshest fix from the live stream; only cold-read if the
+    // stream hasn't produced anything yet. Never fall back to the (frozen)
+    // last-known position - a missing ping is better than a stale one.
+    Position? pos = _latest;
+    if (pos == null) {
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 20),
+          ),
+        );
+      } catch (_) {
+        pos = null;
+      }
     }
     if (pos == null) return null;
+
+    // If the stream restarted/stalled, make sure it is running.
+    if (_posSub == null) _startLocationStream();
 
     int? batteryLevel;
     try {
@@ -151,6 +182,8 @@ class LocationTaskHandler extends TaskHandler {
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
+    await _posSub?.cancel();
+    _posSub = null;
     await _persistQueue();
   }
 }

@@ -273,6 +273,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _permTile(
             ok: _permLocationAlways,
             title: 'Location - "Allow all the time"',
+            subtitle: 'Also turn ON "Use precise location"',
             onFix: _requestLocation,
           ),
           _permTile(ok: _permNotification, title: 'Notifications', onFix: _requestNotification),
