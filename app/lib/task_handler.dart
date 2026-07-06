@@ -6,14 +6,21 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Keys shared between the UI and the background task (via SharedPreferences).
+/// Default backend (staff never need to type this).
+const String defaultServerUrl = 'https://field-tracker-984u.onrender.com';
+
+/// Keys shared between the UI and the background task via SharedPreferences.
 class PrefKeys {
   static const serverUrl = 'server_url';
-  static const apiKey = 'api_key';
-  static const staffName = 'staff_name';
+  static const token = 'auth_token';
+  static const email = 'account_email';
+  static const name = 'staff_name';
   static const deviceId = 'device_id';
   static const intervalSec = 'interval_sec';
   static const pingQueue = 'ping_queue';
+  static const pwSalt = 'pw_salt';
+  static const pwHash = 'pw_hash';
+  static const adminRemovedFlag = 'admin_removed_flag';
 }
 
 @pragma('vm:entry-point')
@@ -26,11 +33,10 @@ class LocationTaskHandler extends TaskHandler {
   final Battery _battery = Battery();
 
   String _serverUrl = '';
-  String _apiKey = '';
-  String _staffName = '';
+  String _token = '';
+  String _name = '';
   String _deviceId = '';
 
-  /// Pings not yet accepted by the server (offline buffer).
   List<Map<String, dynamic>> _queue = [];
   static const int _maxQueue = 1000;
 
@@ -38,12 +44,12 @@ class LocationTaskHandler extends TaskHandler {
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     _prefs = await SharedPreferences.getInstance();
     await _prefs!.reload();
-    _serverUrl = (_prefs!.getString(PrefKeys.serverUrl) ?? '').trim();
+    _serverUrl = (_prefs!.getString(PrefKeys.serverUrl) ?? defaultServerUrl).trim();
     if (_serverUrl.endsWith('/')) {
       _serverUrl = _serverUrl.substring(0, _serverUrl.length - 1);
     }
-    _apiKey = _prefs!.getString(PrefKeys.apiKey) ?? '';
-    _staffName = _prefs!.getString(PrefKeys.staffName) ?? 'Unknown';
+    _token = _prefs!.getString(PrefKeys.token) ?? '';
+    _name = _prefs!.getString(PrefKeys.name) ?? 'Staff';
     _deviceId = _prefs!.getString(PrefKeys.deviceId) ?? 'unknown-device';
 
     final saved = _prefs!.getString(PrefKeys.pingQueue);
@@ -75,15 +81,12 @@ class LocationTaskHandler extends TaskHandler {
       final mm = now.minute.toString().padLeft(2, '0');
       final status = sent
           ? 'Last sent $hh:$mm'
-          : 'Offline — ${_queue.length} saved, will retry';
+          : 'Offline - ${_queue.length} saved, will retry';
       FlutterForegroundTask.updateService(
-        notificationTitle: 'Tracking ON — $_staffName',
+        notificationTitle: 'Tracking ON - $_name',
         notificationText: status,
       );
-      FlutterForegroundTask.sendDataToMain({
-        'lastStatus': status,
-        'queue': _queue.length,
-      });
+      FlutterForegroundTask.sendDataToMain({'lastStatus': status});
     } catch (e) {
       FlutterForegroundTask.sendDataToMain({'lastStatus': 'Error: $e'});
     }
@@ -118,20 +121,18 @@ class LocationTaskHandler extends TaskHandler {
     };
   }
 
-  /// Sends everything in the queue as one batch. Returns true on success.
   Future<bool> _flushQueue() async {
-    if (_queue.isEmpty || _serverUrl.isEmpty) return false;
+    if (_queue.isEmpty || _serverUrl.isEmpty || _token.isEmpty) return false;
     try {
       final res = await http
           .post(
             Uri.parse('$_serverUrl/api/v1/pings'),
             headers: {
               'Content-Type': 'application/json',
-              'X-API-Key': _apiKey,
+              'Authorization': 'Bearer $_token',
             },
             body: jsonEncode({
               'device_id': _deviceId,
-              'name': _staffName,
               'pings': _queue,
             }),
           )

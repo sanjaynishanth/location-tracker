@@ -3,89 +3,118 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Field Tracker — Live Dashboard</title>
+<title>Field Tracker - Live Dashboard</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
   #layout { display: flex; height: 100%; }
   #sidebar {
-    width: 300px; min-width: 300px; background: #14181f; color: #e8eaed;
+    width: 320px; min-width: 320px; background: #14181f; color: #e8eaed;
     display: flex; flex-direction: column; overflow: hidden;
   }
   #sidebar header { padding: 14px 16px; border-bottom: 1px solid #262c36; }
   #sidebar header h1 { font-size: 16px; font-weight: 600; }
   #sidebar header .sub { font-size: 12px; color: #8a919e; margin-top: 2px; }
-  #userlist { flex: 1; overflow-y: auto; padding: 8px; }
+  .section-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+    color: #6b7280; padding: 12px 16px 6px;
+  }
+  #userlist { flex: 1; overflow-y: auto; }
   .user-card {
-    padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 6px;
-    background: #1c222c; border: 1px solid transparent;
+    padding: 10px 12px 10px 14px; cursor: pointer; margin: 0 8px 6px;
+    background: #1c222c; border-radius: 8px; border-left: 4px solid #888;
+    display: flex; align-items: flex-start; gap: 10px;
   }
   .user-card:hover { background: #232a36; }
-  .user-card.selected { border-color: #4d8dff; }
-  .user-card .row1 { display: flex; align-items: center; gap: 8px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .dot.fresh { background: #34c759; }
-  .dot.warn  { background: #ff9f0a; }
-  .dot.stale { background: #ff453a; }
+  .user-card.selected { background: #26303f; }
+  .user-card input { margin-top: 3px; accent-color: #4d8dff; }
+  .user-card .body { flex: 1; min-width: 0; }
   .user-card .name { font-weight: 600; font-size: 14px; }
-  .user-card .meta { font-size: 12px; color: #8a919e; margin-top: 4px; }
-  .user-card .meta .low-batt { color: #ff453a; font-weight: 600; }
+  .user-card .meta { font-size: 12px; color: #8a919e; margin-top: 3px; }
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px;
+    border-radius: 10px; text-transform: uppercase; letter-spacing: .3px; margin-top: 4px;
+  }
+  .badge.live    { background: #14351f; color: #46d16b; }
+  .badge.warn    { background: #3a2c10; color: #f0a63a; }
+  .badge.offline { background: #3a1618; color: #ff6b6b; }
+  .badge.off     { background: #2a2f38; color: #9aa3b2; }
+  .low-batt { color: #ff6b6b; font-weight: 600; }
+
+  #alerts { max-height: 190px; overflow-y: auto; border-top: 1px solid #262c36; }
+  .alert-row { padding: 8px 16px; font-size: 12px; border-bottom: 1px solid #1c222c; }
+  .alert-row .who { font-weight: 600; }
+  .alert-row.tracking_off .what { color: #ff6b6b; }
+  .alert-row.admin_removed .what { color: #ff6b6b; }
+  .alert-row.tracking_on .what { color: #46d16b; }
+  .alert-row .when { color: #6b7280; }
+  #alerts-empty { padding: 10px 16px; font-size: 12px; color: #6b7280; }
+
   #footer { padding: 10px 16px; font-size: 11px; color: #8a919e; border-top: 1px solid #262c36; }
   #footer a { color: #4d8dff; cursor: pointer; text-decoration: none; }
   #map { flex: 1; }
   .marker-pin {
     display: flex; align-items: center; justify-content: center;
-    width: 34px; height: 34px; border-radius: 50%;
+    width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
     color: #fff; font-weight: 700; font-size: 14px;
-    border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.4);
+    border: 2px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5);
   }
-  .marker-pin.fresh { background: #2da44e; }
-  .marker-pin.warn  { background: #e8890c; }
-  .marker-pin.stale { background: #d1242f; }
-  #empty { padding: 24px 16px; color: #8a919e; font-size: 13px; line-height: 1.5; }
-  /* API key overlay */
-  #keyOverlay {
-    position: fixed; inset: 0; background: rgba(10,12,16,.85);
+  .marker-pin span { transform: rotate(45deg); }
+  .marker-pin.stale-ring { opacity: .55; border-style: dashed; }
+
+  /* login overlay */
+  #login {
+    position: fixed; inset: 0; background: #0d0f14;
     display: flex; align-items: center; justify-content: center; z-index: 2000;
   }
-  #keyOverlay .box {
-    background: #1c222c; color: #e8eaed; padding: 28px; border-radius: 12px;
-    width: 340px; box-shadow: 0 8px 40px rgba(0,0,0,.5);
+  #login .box {
+    background: #1c222c; color: #e8eaed; padding: 30px; border-radius: 14px;
+    width: 360px; box-shadow: 0 10px 50px rgba(0,0,0,.6);
   }
-  #keyOverlay h2 { font-size: 16px; margin-bottom: 6px; }
-  #keyOverlay p { font-size: 13px; color: #8a919e; margin-bottom: 14px; }
-  #keyOverlay input {
-    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #363e4c;
+  #login h2 { font-size: 18px; margin-bottom: 4px; }
+  #login p { font-size: 13px; color: #8a919e; margin-bottom: 18px; }
+  #login input {
+    width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #363e4c;
     background: #14181f; color: #e8eaed; font-size: 14px; margin-bottom: 12px;
   }
-  #keyOverlay button {
-    width: 100%; padding: 10px; border: 0; border-radius: 8px; background: #4d8dff;
-    color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+  #login button {
+    width: 100%; padding: 11px; border: 0; border-radius: 8px; background: #4d8dff;
+    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
   }
-  #keyError { color: #ff453a; font-size: 12px; margin-bottom: 10px; display: none; }
+  #loginError { color: #ff6b6b; font-size: 13px; margin-bottom: 10px; display: none; }
 </style>
 </head>
 <body>
-<div id="keyOverlay">
+<div id="login">
   <div class="box">
-    <h2>Field Tracker Dashboard</h2>
-    <p>Enter the API key (same value as API_KEY in the backend .env file).</p>
-    <div id="keyError">Wrong key, try again.</div>
-    <input id="keyInput" type="password" placeholder="API key" autofocus>
-    <button onclick="submitKey()">Open dashboard</button>
+    <h2>Field Tracker</h2>
+    <p>Admin sign in</p>
+    <div id="loginError"></div>
+    <input id="email" type="email" placeholder="Email" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button onclick="doLogin()">Sign in</button>
   </div>
 </div>
 
-<div id="layout">
+<div id="layout" style="display:none">
   <div id="sidebar">
     <header>
       <h1>Field Tracker</h1>
-      <div class="sub" id="statusLine">Connecting…</div>
+      <div class="sub" id="statusLine">Loading...</div>
     </header>
+
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Staff</span>
+      <a id="toggleAll" style="color:#4d8dff;cursor:pointer;font-size:11px;text-transform:none;letter-spacing:0">show all</a>
+    </div>
     <div id="userlist"></div>
+
+    <div class="section-title">Recent activity</div>
+    <div id="alerts"><div id="alerts-empty">No events yet.</div></div>
+
     <div id="footer">
-      Auto-refreshes every 10 s · <a onclick="changeKey()">change key</a>
+      Auto-refreshes every 10 s &middot; <span id="who"></span> &middot; <a onclick="logout()">sign out</a>
     </div>
   </div>
   <div id="map"></div>
@@ -93,27 +122,42 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const KEY_STORAGE = 'tracker_api_key';
-let apiKey = localStorage.getItem(KEY_STORAGE) || '';
-let map, markers = {}, historyLine = null, selectedId = null, didFit = false;
+const TOKEN_KEY = 'ft_token', NAME_KEY = 'ft_name';
+let token = localStorage.getItem(TOKEN_KEY) || '';
+let map, markers = {}, trails = {}, didFit = false;
+const selected = new Set();          // user ids whose trail is shown
+const colorCache = {};
+const PALETTE = ['#4d8dff','#e8890c','#46d16b','#c05cf0','#f0466e','#22b8cf',
+                 '#f7b500','#7b61ff','#00b894','#ff7675','#0984e3','#e17055'];
+
+function colorFor(id) {
+  if (!(id in colorCache)) colorCache[id] = PALETTE[Object.keys(colorCache).length % PALETTE.length];
+  return colorCache[id];
+}
 
 function initMap() {
-  map = L.map('map').setView([20.5937, 78.9629], 5); // India
+  map = L.map('map').setView([20.5937, 78.9629], 5);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
+    maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 }
 
-function freshness(lastSeenIso) {
-  const mins = (Date.now() - new Date(lastSeenIso).getTime()) / 60000;
-  if (mins < 5) return 'fresh';
-  if (mins < 15) return 'warn';
-  return 'stale';
+// ---- status logic ----
+function minsSince(iso) { return (Date.now() - new Date(iso).getTime()) / 60000; }
+
+function statusOf(u) {
+  if (!u.last_seen) return { cls: 'off', label: 'no data' };
+  const m = minsSince(u.last_seen);
+  if (!u.tracking_enabled && u.last_event && u.last_event.type === 'tracking_off')
+    return { cls: 'off', label: 'tracking off' };
+  if (m < 5) return { cls: 'live', label: 'live' };
+  if (m < 15) return { cls: 'warn', label: 'delayed' };
+  return { cls: 'offline', label: 'offline' };
 }
 
-function agoText(lastSeenIso) {
-  const mins = Math.floor((Date.now() - new Date(lastSeenIso).getTime()) / 60000);
+function agoText(iso) {
+  if (!iso) return 'never';
+  const mins = Math.floor(minsSince(iso));
   if (mins < 1) return 'just now';
   if (mins < 60) return mins + ' min ago';
   const h = Math.floor(mins / 60);
@@ -122,125 +166,200 @@ function agoText(lastSeenIso) {
 }
 
 async function api(path) {
-  const res = await fetch(path, { headers: { 'X-API-Key': apiKey } });
+  const res = await fetch(path, { headers: { 'Authorization': 'Bearer ' + token } });
   if (res.status === 401) throw new Error('unauthorized');
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
 
-function makeIcon(name, cls) {
+function makeIcon(name, color, stale) {
   const letter = (name || '?').trim().charAt(0).toUpperCase();
   return L.divIcon({
     className: '',
-    html: `<div class="marker-pin ${cls}">${letter}</div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    html: `<div class="marker-pin ${stale ? 'stale-ring' : ''}" style="background:${color}"><span>${letter}</span></div>`,
+    iconSize: [34, 34], iconAnchor: [17, 34],
   });
 }
 
-async function refreshUsers() {
+async function refresh() {
   let users;
   try {
     users = await api('/api/v1/users');
-    document.getElementById('statusLine').textContent =
-      users.length + ' device(s) · updated ' + new Date().toLocaleTimeString();
   } catch (e) {
-    if (e.message === 'unauthorized') { showKeyOverlay(true); return; }
-    document.getElementById('statusLine').textContent = 'Server unreachable — retrying…';
+    if (e.message === 'unauthorized') return showLogin('Session expired, sign in again.');
+    document.getElementById('statusLine').textContent = 'Server unreachable - retrying...';
     return;
   }
+  const liveCount = users.filter(u => statusOf(u).cls === 'live').length;
+  document.getElementById('statusLine').textContent =
+    `${users.length} staff · ${liveCount} live · ${new Date().toLocaleTimeString()}`;
 
   const list = document.getElementById('userlist');
   list.innerHTML = '';
   if (users.length === 0) {
-    list.innerHTML = '<div id="empty">No devices yet.<br><br>Install the app on a phone, enter this server URL and API key, and switch tracking ON.</div>';
-    return;
+    list.innerHTML = '<div id="alerts-empty" style="padding:16px">No staff yet. Install the app on a phone, register, and switch tracking ON.</div>';
   }
 
   const bounds = [];
   const seen = new Set();
   for (const u of users) {
-    seen.add(u.device_id);
-    const cls = freshness(u.last_seen);
+    seen.add(u.id);
+    const color = colorFor(u.id);
+    const st = statusOf(u);
 
     // sidebar card
     const card = document.createElement('div');
-    card.className = 'user-card' + (u.device_id === selectedId ? ' selected' : '');
+    card.className = 'user-card' + (selected.has(u.id) ? ' selected' : '');
+    card.style.borderLeftColor = color;
     const batt = u.battery == null ? '' :
-      ` · <span class="${u.battery <= 20 ? 'low-batt' : ''}">🔋 ${u.battery}%</span>`;
+      ` &middot; <span class="${u.battery <= 20 ? 'low-batt' : ''}">${u.battery}%</span>`;
     card.innerHTML = `
-      <div class="row1"><span class="dot ${cls}"></span><span class="name"></span></div>
-      <div class="meta">${agoText(u.last_seen)}${batt}</div>`;
+      <input type="checkbox" ${selected.has(u.id) ? 'checked' : ''}>
+      <div class="body">
+        <div class="name"></div>
+        <div class="meta">${agoText(u.last_seen)}${batt}</div>
+        <span class="badge ${st.cls}">${st.label}</span>
+      </div>`;
     card.querySelector('.name').textContent = u.name;
-    card.onclick = () => selectUser(u);
+    const cb = card.querySelector('input');
+    cb.onclick = (e) => { e.stopPropagation(); toggleSelect(u); };
+    card.onclick = () => { focusUser(u); };
     list.appendChild(card);
 
-    // map marker
+    // map marker (always shown, at last known position)
+    if (u.lat == null) continue;
     const pos = [u.lat, u.lng];
     bounds.push(pos);
-    if (markers[u.device_id]) {
-      markers[u.device_id].setLatLng(pos).setIcon(makeIcon(u.name, cls));
+    const stale = st.cls === 'offline' || st.cls === 'off';
+    if (markers[u.id]) {
+      markers[u.id].setLatLng(pos).setIcon(makeIcon(u.name, color, stale));
     } else {
-      markers[u.device_id] = L.marker(pos, { icon: makeIcon(u.name, cls) }).addTo(map);
+      markers[u.id] = L.marker(pos, { icon: makeIcon(u.name, color, stale) }).addTo(map);
+      markers[u.id].on('click', () => focusUser(u));
     }
-    markers[u.device_id].bindTooltip(`${u.name} — ${agoText(u.last_seen)}`);
+    markers[u.id].bindTooltip(`${u.name} - ${st.label} (${agoText(u.last_seen)})`);
   }
 
-  // drop markers for users that disappeared
+  // remove markers/trails for users that vanished
   for (const id of Object.keys(markers)) {
-    if (!seen.has(id)) { map.removeLayer(markers[id]); delete markers[id]; }
+    if (!seen.has(Number(id))) { map.removeLayer(markers[id]); delete markers[id]; }
+  }
+
+  // refresh trails for selected users
+  for (const id of selected) await drawTrail(id);
+  for (const id of Object.keys(trails)) {
+    if (!selected.has(Number(id))) { map.removeLayer(trails[id]); delete trails[id]; }
   }
 
   if (!didFit && bounds.length) {
     map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
     didFit = true;
   }
+
+  loadAlerts();
 }
 
-async function selectUser(u) {
-  selectedId = u.device_id;
-  map.setView([u.lat, u.lng], Math.max(map.getZoom(), 14));
+function toggleSelect(u) {
+  if (selected.has(u.id)) selected.delete(u.id);
+  else selected.add(u.id);
+  refresh();
+}
+
+async function focusUser(u) {
+  if (!selected.has(u.id)) selected.add(u.id);
+  if (u.lat != null) map.setView([u.lat, u.lng], Math.max(map.getZoom(), 14));
+  refresh();
+}
+
+async function drawTrail(id) {
   try {
-    const h = await api(`/api/v1/users/${encodeURIComponent(u.device_id)}/history?hours=12`);
-    if (historyLine) map.removeLayer(historyLine);
+    const h = await api(`/api/v1/users/${id}/history?hours=12`);
     const pts = h.points.map(p => [p.lat, p.lng]);
+    if (trails[id]) map.removeLayer(trails[id]);
     if (pts.length > 1) {
-      historyLine = L.polyline(pts, { color: '#4d8dff', weight: 4, opacity: .8 }).addTo(map);
+      trails[id] = L.polyline(pts, { color: colorFor(id), weight: 4, opacity: .85 }).addTo(map);
     }
-  } catch (e) { /* history is best-effort */ }
-  refreshUsers();
+  } catch (e) { /* best effort */ }
 }
 
-function showKeyOverlay(wasWrong) {
-  document.getElementById('keyError').style.display = wasWrong ? 'block' : 'none';
-  document.getElementById('keyOverlay').style.display = 'flex';
-  document.getElementById('keyInput').focus();
+document.getElementById('toggleAll').onclick = async () => {
+  const users = await api('/api/v1/users').catch(() => []);
+  if (selected.size < users.length) users.forEach(u => selected.add(u.id));
+  else selected.clear();
+  document.getElementById('toggleAll').textContent = selected.size ? 'hide all' : 'show all';
+  refresh();
+};
+
+async function loadAlerts() {
+  let events;
+  try { events = await api('/api/v1/events?hours=48'); } catch { return; }
+  const box = document.getElementById('alerts');
+  const notable = events.filter(e => e.type === 'tracking_off' || e.type === 'admin_removed' || e.type === 'tracking_on');
+  if (notable.length === 0) { box.innerHTML = '<div id="alerts-empty">No events yet.</div>'; return; }
+  box.innerHTML = '';
+  const label = { tracking_off: 'turned tracking OFF', admin_removed: 'removed app protection', tracking_on: 'turned tracking ON' };
+  for (const e of notable.slice(0, 40)) {
+    const row = document.createElement('div');
+    row.className = 'alert-row ' + e.type;
+    row.innerHTML = `<span class="who"></span> <span class="what">${label[e.type] || e.type}</span>
+      <div class="when">${new Date(e.at).toLocaleString()}</div>`;
+    row.querySelector('.who').textContent = e.name;
+    box.appendChild(row);
+  }
 }
 
-function submitKey() {
-  apiKey = document.getElementById('keyInput').value.trim();
-  localStorage.setItem(KEY_STORAGE, apiKey);
-  document.getElementById('keyOverlay').style.display = 'none';
-  refreshUsers();
+// ---- login ----
+function showLogin(msg) {
+  document.getElementById('layout').style.display = 'none';
+  document.getElementById('login').style.display = 'flex';
+  const err = document.getElementById('loginError');
+  if (msg) { err.textContent = msg; err.style.display = 'block'; }
+  document.getElementById('email').focus();
 }
 
-function changeKey() {
-  localStorage.removeItem(KEY_STORAGE);
-  showKeyOverlay(false);
+function showApp() {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('layout').style.display = 'flex';
+  document.getElementById('who').textContent = localStorage.getItem(NAME_KEY) || '';
+  if (!map) initMap();
+  refresh();
 }
 
-document.getElementById('keyInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') submitKey();
-});
-
-initMap();
-if (apiKey) {
-  document.getElementById('keyOverlay').style.display = 'none';
-  refreshUsers();
-} else {
-  showKeyOverlay(false);
+async function doLogin() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+  try {
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(res.status === 401 ? 'Wrong email or password' : (d.detail || 'Login failed'));
+    }
+    const data = await res.json();
+    if (data.role !== 'admin') throw new Error('This account is not an admin. Use the manager account.');
+    token = data.token;
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(NAME_KEY, data.name);
+    showApp();
+  } catch (e) {
+    err.textContent = e.message; err.style.display = 'block';
+  }
 }
-setInterval(refreshUsers, 10000);
+
+function logout() {
+  localStorage.removeItem(TOKEN_KEY);
+  token = '';
+  showLogin();
+}
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+if (token) showApp(); else showLogin();
+setInterval(() => { if (token && document.getElementById('layout').style.display !== 'none') refresh(); }, 10000);
 </script>
 </body>
 </html>
