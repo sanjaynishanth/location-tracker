@@ -41,9 +41,11 @@ class LocationTaskHandler extends TaskHandler {
   // Continuous GPS stream keeps a live fix instead of cold one-shot reads.
   StreamSubscription<Position>? _posSub;
   Position? _latest;
+  int _lastBattery = -1;
+  int _movedSinceFlush = 0;
 
   List<Map<String, dynamic>> _queue = [];
-  static const int _maxQueue = 1000;
+  static const int _maxQueue = 2000;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -73,28 +75,67 @@ class LocationTaskHandler extends TaskHandler {
     _posSub?.cancel();
     try {
       _posSub = Geolocator.getPositionStream(
+        // Emit a fresh fix every ~20 m of real movement. This makes the
+        // recorded trail hug the road instead of cutting straight lines
+        // between sparse once-a-minute points.
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.bestForNavigation,
-          distanceFilter: 0,
+          distanceFilter: 20,
         ),
       ).listen(
-        (p) => _latest = p,
+        (p) {
+          _latest = p;
+          _enqueuePoint(p);
+          _movedSinceFlush++;
+        },
         onError: (_) {},
         cancelOnError: false,
       );
     } catch (_) {}
   }
 
+  void _enqueuePoint(Position p) {
+    _queue.add({
+      'lat': p.latitude,
+      'lng': p.longitude,
+      'accuracy': p.accuracy,
+      'speed': p.speed,
+      'battery': _lastBattery >= 0 ? _lastBattery : null,
+      'recorded_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    if (_queue.length > _maxQueue) {
+      _queue.removeRange(0, _queue.length - _maxQueue);
+    }
+  }
+
   @override
   void onRepeatEvent(DateTime timestamp) async {
     try {
-      final ping = await _capturePing();
-      if (ping != null) {
-        _queue.add(ping);
-        if (_queue.length > _maxQueue) {
-          _queue.removeRange(0, _queue.length - _maxQueue);
-        }
+      try {
+        _lastBattery = await _battery.batteryLevel;
+      } catch (_) {}
+
+      // Make sure the stream is alive.
+      if (_posSub == null) _startLocationStream();
+
+      // Seed a fix if the stream hasn't produced one yet.
+      if (_latest == null) {
+        try {
+          _latest = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 20),
+            ),
+          );
+        } catch (_) {}
       }
+
+      // If the phone was stationary (no movement points this interval), record
+      // one heartbeat so the dashboard still shows the person online.
+      if (_movedSinceFlush == 0 && _latest != null) {
+        _enqueuePoint(_latest!);
+      }
+      _movedSinceFlush = 0;
 
       final sent = await _flushQueue();
       await _persistQueue();
@@ -102,9 +143,14 @@ class LocationTaskHandler extends TaskHandler {
       final now = DateTime.now();
       final hh = now.hour.toString().padLeft(2, '0');
       final mm = now.minute.toString().padLeft(2, '0');
-      final status = sent
-          ? 'Last sent $hh:$mm'
-          : 'Offline - ${_queue.length} saved, will retry';
+      final String status;
+      if (_latest == null) {
+        status = 'No GPS signal - is Location (GPS) ON?';
+      } else if (sent) {
+        status = 'Last sent $hh:$mm';
+      } else {
+        status = 'Offline - ${_queue.length} saved, will retry';
+      }
       FlutterForegroundTask.updateService(
         notificationTitle: 'Tracking ON - $_name',
         notificationText: status,
@@ -113,43 +159,6 @@ class LocationTaskHandler extends TaskHandler {
     } catch (e) {
       FlutterForegroundTask.sendDataToMain({'lastStatus': 'Error: $e'});
     }
-  }
-
-  Future<Map<String, dynamic>?> _capturePing() async {
-    // Prefer the freshest fix from the live stream; only cold-read if the
-    // stream hasn't produced anything yet. Never fall back to the (frozen)
-    // last-known position - a missing ping is better than a stale one.
-    Position? pos = _latest;
-    if (pos == null) {
-      try {
-        pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 20),
-          ),
-        );
-      } catch (_) {
-        pos = null;
-      }
-    }
-    if (pos == null) return null;
-
-    // If the stream restarted/stalled, make sure it is running.
-    if (_posSub == null) _startLocationStream();
-
-    int? batteryLevel;
-    try {
-      batteryLevel = await _battery.batteryLevel;
-    } catch (_) {}
-
-    return {
-      'lat': pos.latitude,
-      'lng': pos.longitude,
-      'accuracy': pos.accuracy,
-      'speed': pos.speed,
-      'battery': batteryLevel,
-      'recorded_at': DateTime.now().toUtc().toIso8601String(),
-    };
   }
 
   Future<bool> _flushQueue() async {

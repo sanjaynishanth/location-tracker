@@ -141,6 +141,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _snack('Turn on Location "Allow all the time" first');
       return;
     }
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      _snack('Turn ON Location (GPS) in your phone settings, then try again');
+      await Geolocator.openLocationSettings();
+      return;
+    }
 
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
